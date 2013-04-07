@@ -58,7 +58,7 @@ class Log11
     };
 
 public:
-    enum class Level { DEBUG, INFO, ERROR, FATAL };
+    enum class Level { DEBUG, INFO, WARNING, ERROR, FATAL };
 
     Log11() :
             isInit{false},
@@ -133,6 +133,20 @@ public:
             auto& st = getStr();
             writeDate(st);
             st += "INFO: ";
+            print(st, std::forward<Ts>(args)...);
+        }
+    }
+
+    template <typename ...Ts>
+    void warn(Ts&&... args)
+    {
+        if(c_level <= Level::WARNING)
+        {
+            checkInit();
+
+            auto& st = getStr();
+            writeDate(st);
+            st += "WARN: ";
             print(st, std::forward<Ts>(args)...);
         }
     }
