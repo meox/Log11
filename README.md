@@ -45,7 +45,45 @@ A simple C++11 log thread-safe class.
 
   * setLogInit(Fun f) // set the function callback used by Log11 for first call
   * setLogCall(Fun f) // set the function callback used by Log11 for log
-  
+
+## Advanced example
+Using a file to log. We can define a simple class like this:
+
+```
+    struct FileLog
+    {
+        Log11 log;
+    
+        FileLog()
+        {
+            log.setLogInit([=](){
+                 out.open("mylog.txt");
+            });
+    
+            log.setLogCall([=](const std::string& s){
+                 out << s << std::endl;
+            });        
+        }
+    
+        ~FileLog()
+        {
+            log.close(); // close safety the log
+            out.close(); // close the file
+        }
+    
+        std::ofstream out;
+    };
+    
+    int main()
+    {
+        FileLog flog;
+        
+        flog.log.info("Hello", std::string{"World!"});
+        
+        return 0;
+    }
+```
+In the constructor we set our callback: setLogInit and setLogCall, after in the main function we can use the log as usual
 ## Compile
 
 g++ -Wall -O3 --std=c++11 tlog.cpp -o tlog -lpthread
