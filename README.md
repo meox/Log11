@@ -1,7 +1,7 @@
 Log11
 =====
 
-A simple C++11 log thread-safe class.
+A simple C++11 thread-safe class for logging.
 
 ## Usage
 
