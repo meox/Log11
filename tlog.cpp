@@ -3,40 +3,68 @@
 #include <thread>
 #include <functional>
 #include <future>
+#include <fstream>
 
 #include "log11.hpp"
+
+
+struct FileLog
+{
+    Log11 log;
+
+    FileLog()
+    {
+        log.setLogInit([=](){
+             out.open("mylog.txt");
+        });
+
+        log.setLogCall([=](const std::string& s){
+             out << s << std::endl;
+        });        
+    }
+
+    ~FileLog()
+    {
+        log.close();
+        out.close();
+    }
+
+    std::ofstream out;
+};
 
 int main()
 {
 
-    Log11 log;
+    FileLog flog;
+    //Log11 log;
 
-    std::thread th_a([&log](){
+    std::thread th_a([&flog](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            log.info("A", i, "->", 3.14);
+            flog.log.info("A", i, "->", 3.14);
         }
     });
 
 
-    std::thread th_b([&log](){
+    std::thread th_b([&flog](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            log.info("B", i, "->", 3.14, ":)");
+            flog.log.info("B", i, "->", 3.14, ":)");
         }
     });
 
 
-    std::thread th_c([&log](){
+    std::thread th_c([&flog](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            log.info("C", i, "->", 3.14, 5, "alfa");
+            flog.log.debug("C", i, "->", 3.14, 5, "alfa");
         }
     });
 
     th_a.join();
     th_b.join();
     th_c.join();
+
 
     return 0;
 }

@@ -62,6 +62,7 @@ public:
 
     Log11() :
             isInit{false},
+            isClose{false},
             c_level{Level::DEBUG},
             sep_{" "},
             fmt_date{"%Y-%m-%d %H:%M:%S"},
@@ -76,6 +77,7 @@ public:
 
     Log11(const Log11& rhs) :
             isInit{rhs.isInit},
+            isClose{rhs.isClose},
             c_level{rhs.c_level},
             sep_{rhs.sep_},
             fmt_date{rhs.fmt_date},
@@ -186,11 +188,19 @@ public:
     template <typename Fun>
     void setLogCall(Fun f) { fn_logcall = f; }
 
+    void close()
+    {
+        if(!isClose)
+        {
+            isClose = true;
+            worker.push([=]{ worker.finish(); });
+            thw.join();
+        }
+    }
   
     virtual ~Log11()
     {
-        worker.push([=]{ worker.finish(); });
-        thw.join();
+        close();
     }
 
 private:
@@ -276,7 +286,7 @@ private:
     typedef std::map<std::thread::id, std::string> MAP_THREAD;
     enum { QUEUE_SIZE = 10};
 
-    bool isInit;
+    bool isInit, isClose;
 
     Level c_level;
     std::string sep_;
