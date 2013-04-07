@@ -17,6 +17,8 @@ class Log11
     {
         Worker() : done{false} {}
         Worker(const Worker& rhs) : done{rhs.done}, qworker{} {}
+        Worker(Worker &&rhs) : done{rhs.done}, qworker(std::move(rhs.qworker))
+        {}
 
         void finish() { done = true; }
 
@@ -66,26 +68,48 @@ public:
             c_level{Level::DEBUG},
             sep_{" "},
             fmt_date{"%Y-%m-%d %H:%M:%S"},
+            fmt_date_len{fmt_date.size()},
             worker{},
             fn_loginit{ [](){} },
             fn_logcall{ [](const std::string& t){ std::cout << t << std::endl; } }
     {
-        fmt_date_len = fmt_date.size();
         thw = std::thread([=](){ worker.run(); });
     }
 
 
+    /**
+     * Copy constructor
+     */
     Log11(const Log11& rhs) :
             isInit{rhs.isInit},
             isClose{rhs.isClose},
             c_level{rhs.c_level},
             sep_{rhs.sep_},
             fmt_date{rhs.fmt_date},
+            fmt_date_len{rhs.fmt_date_len},
             worker{rhs.worker},
             fn_loginit{ rhs.fn_loginit },
             fn_logcall{ rhs.fn_logcall }
     {
-        fmt_date_len = fmt_date.size();
+        thw = std::thread([=](){ worker.run(); });
+    }
+
+
+    /**
+     * Move constructor
+     */
+    Log11(Log11&& rhs) :
+            isInit{rhs.isInit},
+            isClose{rhs.isClose},
+            c_level{rhs.c_level},
+            sep_{std::move(rhs.sep_)},
+            fmt_date{std::move(rhs.fmt_date)},
+            fmt_date_len{rhs.fmt_date_len},
+            worker{},
+            fn_loginit{ std::move(rhs.fn_loginit) },
+            fn_logcall{ std::move(rhs.fn_logcall) }
+    {
+        rhs.close();
         thw = std::thread([=](){ worker.run(); });
     }
 
@@ -291,6 +315,7 @@ private:
     Level c_level;
     std::string sep_;
     std::string fmt_date;
+    size_t fmt_date_len;
 
     Worker worker;
     std::function<void()> fn_loginit;
@@ -299,6 +324,5 @@ private:
     std::array<std::mutex, QUEUE_SIZE> mutex_map;
     std::array<MAP_THREAD, QUEUE_SIZE> map_m;
 
-    size_t fmt_date_len;
     std::thread thw;
 };
