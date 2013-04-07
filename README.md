@@ -36,10 +36,11 @@ A simple C++11 thread-safe class for logging.
 
   * setLevel ( const Log11::Level& l ) // set new level { DEBUG, INFO, WARN, ERROR, FATAL }
   * sep (  ) // set separator (default: " ")
-  
+  * setDateFmt ( const std::string &fmt ) // prepend datetime in log message
+
   * debug ( ... ) // log message at debug level
   * info ( ... )  // log message at info level
-  * warn ( ... )  // log message at info level
+  * warn ( ... )  // log message at warn level
   * error ( ... ) // log message at error level
   * fatal ( ... ) // log message at fatal level
 
