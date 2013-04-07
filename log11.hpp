@@ -9,7 +9,7 @@
 #include <map>
 #include <chrono>
 #include <deque>
-
+#include <array>
 
 class Log11
 {
@@ -183,7 +183,6 @@ public:
     template <typename Fun>
     void setLogInit(Fun f) { fn_loginit = f; }
 
-
     template <typename Fun>
     void setLogCall(Fun f) { fn_logcall = f; }
 
@@ -205,6 +204,7 @@ private:
         print(st, std::forward<Ts>(args)...);
     }
 
+
     template <typename R>
     void print(std::string& st, R&& r)
     {
@@ -217,14 +217,16 @@ private:
 
     std::string& getStr()
     {
-        std::lock_guard<std::mutex> g{m_map};
-
+        std::hash<std::thread::id> hash_fn;
         auto id = std::this_thread::get_id();
-        auto f_id = map_s.find(id);
+        auto index_map = (hash_fn(id) % QUEUE_SIZE);
 
-        if(f_id == map_s.end())
+        std::lock_guard<std::mutex> g{mutex_map[index_map]};
+
+        auto f_id = map_m[index_map].find(id);
+        if(f_id == map_m[index_map].end())
         {
-            auto nid = map_s.insert(std::pair<std::thread::id, std::string>(id, std::string{}));
+            auto nid = map_m[index_map].insert(std::pair<std::thread::id, std::string>(id, std::string{}));
             return nid.first->second;
         }
         else
@@ -269,10 +271,11 @@ private:
         worker.push([=]{ fn_logcall(tlog); });
     }
 
-protected:
-    std::map<std::thread::id, std::string> map_s;
 
 private:
+    typedef std::map<std::thread::id, std::string> MAP_THREAD;
+    enum { QUEUE_SIZE = 10};
+
     bool isInit;
 
     Level c_level;
@@ -283,7 +286,8 @@ private:
     std::function<void()> fn_loginit;
     std::function<void(const std::string& str)> fn_logcall;
 
-    std::mutex m_map;
+    std::array<std::mutex, QUEUE_SIZE> mutex_map;
+    std::array<MAP_THREAD, QUEUE_SIZE> map_m;
 
     size_t fmt_date_len;
     std::thread thw;
