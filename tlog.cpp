@@ -36,8 +36,7 @@ int main()
 {
 
     FileLog flog;
-    //Log11 log;
-
+ 
     std::thread th_a([&flog](){
         for (unsigned int i = 0; i < 10000; i++)
         {
