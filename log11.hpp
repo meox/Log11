@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <iostream>
 #include <thread>
 #include <future>
@@ -24,7 +25,7 @@ class Log11
 
         void run()
         {
-            std::chrono::milliseconds d( 100 );
+            //std::chrono::milliseconds d( 100 );
 
             while(!done)
             {
@@ -41,7 +42,8 @@ class Log11
                 else
                 {
                     mw.unlock();
-                    std::this_thread::sleep_for(d);
+                    usleep(100000);
+                    //std::this_thread::sleep_for(d);
                 }
             }
         }
@@ -60,12 +62,12 @@ class Log11
     };
 
 public:
-    enum class Level { DEBUG, INFO, WARNING, ERROR, FATAL };
+    enum class Level { LEVEL_DEBUG, LEVEL_INFO, LEVEL_WARNING, LEVEL_ERROR, LEVEL_FATAL };
 
     Log11() :
             isInit{false},
             isClose{false},
-            c_level{Level::DEBUG},
+            c_level{Level::LEVEL_DEBUG},
             sep_{" "},
             fmt_date{"%Y-%m-%d %H:%M:%S"},
             fmt_date_len{fmt_date.size()},
@@ -109,7 +111,7 @@ public:
             fn_loginit{ std::move(rhs.fn_loginit) },
             fn_logcall{ std::move(rhs.fn_logcall) }
     {
-        rhs.close();
+        rhs.wait();
         thw = std::thread([=](){ worker.run(); });
     }
 
@@ -138,7 +140,7 @@ public:
     template <typename ...Ts>
     void debug(Ts&&... args)
     {
-        if(c_level <= Level::DEBUG)
+        if(c_level <= Level::LEVEL_DEBUG)
         {
             checkInit();
 
@@ -152,7 +154,7 @@ public:
     template <typename ...Ts>
     void info(Ts&&... args)
     {
-        if(c_level <= Level::INFO)
+        if(c_level <= Level::LEVEL_INFO)
         {
             checkInit();
 
@@ -166,7 +168,7 @@ public:
     template <typename ...Ts>
     void warn(Ts&&... args)
     {
-        if(c_level <= Level::WARNING)
+        if(c_level <= Level::LEVEL_WARNING)
         {
             checkInit();
 
@@ -180,7 +182,7 @@ public:
     template <typename ...Ts>
     void error(Ts&&... args)
     {
-        if(c_level <= Level::ERROR)
+        if(c_level <= Level::LEVEL_ERROR)
         {
             checkInit();
 
@@ -194,7 +196,7 @@ public:
     template <typename ...Ts>
     void fatal(Ts&&... args)
     {
-        if(c_level <= Level::FATAL)
+        if(c_level <= Level::LEVEL_FATAL)
         {
             checkInit();
 
@@ -212,7 +214,7 @@ public:
     template <typename Fun>
     void setLogCall(Fun f) { fn_logcall = f; }
 
-    void close()
+    void wait()
     {
         if(!isClose)
         {
@@ -224,7 +226,7 @@ public:
   
     virtual ~Log11()
     {
-        close();
+        wait();
     }
 
 private:
