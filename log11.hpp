@@ -1,3 +1,7 @@
+#ifndef __LOG11HPP__
+#define __LOG11HPP__
+
+
 #include <unistd.h>
 #include <iostream>
 #include <algorithm>
@@ -246,6 +250,14 @@ public:
         return *this;
     }
 
+    Log11& critStream()
+    {
+        writeStream("CRITIC: ", error_stream);
+
+        return *this;
+    }
+
+
     Log11& warnStream()
     {
         writeStream("WARN: ", warn_stream);
@@ -256,10 +268,7 @@ public:
 
     Log11& writeStream(const std::string tag, std::stringstream& pstream)
     {
-        if(current_stream != &pstream)
-        {
-            flush_stream();            
-        }
+        flush_stream();            
 
         current_stream = &pstream;
         std::string s{};
@@ -423,3 +432,5 @@ private:
     std::stringstream debug_stream, info_stream, warn_stream, error_stream;
     std::stringstream *current_stream;
 };
+
+#endif
