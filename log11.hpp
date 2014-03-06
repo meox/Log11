@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <iostream>
+#include <algorithm>
 #include <thread>
 #include <future>
 #include <functional>
@@ -12,6 +13,7 @@
 #include <deque>
 #include <array>
 
+
 class Log11
 {
     struct Worker
@@ -22,6 +24,16 @@ class Log11
         {}
 
         void finish() { done = true; }
+        void flush()
+        {
+            bool f = false;
+            while(!f)
+            {
+                mw.lock(); f = qworker.empty(); mw.unlock();
+                if(f) break;
+                usleep(100000);
+            }
+        }
 
         void run()
         {
@@ -73,7 +85,8 @@ public:
             fmt_date_len{fmt_date.size()},
             worker{},
             fn_loginit{ [](){} },
-            fn_logcall{ [](const std::string& t){ std::cout << t << std::endl; } }
+            fn_logcall{ [](const std::string& t){ std::cout << t << std::endl; } },
+            current_stream(&debug_stream)
     {
         thw = std::thread([=](){ worker.run(); });
     }
@@ -91,7 +104,8 @@ public:
             fmt_date_len{rhs.fmt_date_len},
             worker{rhs.worker},
             fn_loginit{ rhs.fn_loginit },
-            fn_logcall{ rhs.fn_logcall }
+            fn_logcall{ rhs.fn_logcall },
+            current_stream(&debug_stream)
     {
         thw = std::thread([=](){ worker.run(); });
     }
@@ -109,7 +123,8 @@ public:
             fmt_date_len{rhs.fmt_date_len},
             worker{},
             fn_loginit{ std::move(rhs.fn_loginit) },
-            fn_logcall{ std::move(rhs.fn_logcall) }
+            fn_logcall{ std::move(rhs.fn_logcall) },
+            current_stream(&debug_stream)
     {
         rhs.wait();
         thw = std::thread([=](){ worker.run(); });
@@ -137,74 +152,128 @@ public:
 
     Level getLevel() const { return c_level; }
 
+
     template <typename ...Ts>
-    void debug(Ts&&... args)
+    void print_level(const std::string& tag, Ts&&... args)
+    {
+        checkInit();
+
+        auto& st = getStr();
+        writeDate(st);
+        st += tag;
+        print(st, std::forward<Ts>(args)...);
+    }
+
+
+    template <typename ...Ts>
+    Log11& debug(Ts&&... args)
     {
         if(c_level <= Level::LEVEL_DEBUG)
         {
-            checkInit();
-
-            auto& st = getStr();
-            writeDate(st);
-            st += "DEBUG: ";
-            print(st, std::forward<Ts>(args)...);
+            print_level("DEBUG: ", std::forward<Ts>(args)...);
         }
+
+        return *this;
     }
 
+
     template <typename ...Ts>
-    void info(Ts&&... args)
+    Log11& info(Ts&&... args)
     {
         if(c_level <= Level::LEVEL_INFO)
         {
-            checkInit();
-
-            auto& st = getStr();
-            writeDate(st);
-            st += "INFO: ";
-            print(st, std::forward<Ts>(args)...);
+            print_level("INFO: ", std::forward<Ts>(args)...);
         }
+
+        return *this;
     }
 
+
     template <typename ...Ts>
-    void warn(Ts&&... args)
+    Log11& warn(Ts&&... args)
     {
         if(c_level <= Level::LEVEL_WARNING)
         {
-            checkInit();
-
-            auto& st = getStr();
-            writeDate(st);
-            st += "WARN: ";
-            print(st, std::forward<Ts>(args)...);
+            print_level("WARN: ", std::forward<Ts>(args)...);
         }
+
+        return *this;
     }
 
+
     template <typename ...Ts>
-    void error(Ts&&... args)
+    Log11& error(Ts&&... args)
     {
         if(c_level <= Level::LEVEL_ERROR)
         {
-            checkInit();
-
-            auto& st = getStr();
-            writeDate(st);
-            st += "ERROR: ";
-            print(st, std::forward<Ts>(args)...);
+            print_level("ERROR: ", std::forward<Ts>(args)...);
         }
+
+        return *this;
     }
 
+
     template <typename ...Ts>
-    void fatal(Ts&&... args)
+    Log11& fatal(Ts&&... args)
     {
         if(c_level <= Level::LEVEL_FATAL)
         {
-            checkInit();
-
-            auto& st = getStr();
-            writeDate(st);
-            st += "FATAL: ";
-            print(st, std::forward<Ts>(args)...);
+            print_level("FATAL: ", std::forward<Ts>(args)...);
         }
+
+        return *this;
+    }
+
+
+    Log11& debugStream()
+    {
+        writeStream("DEBUG: ", debug_stream);
+
+        return *this;
+    }
+
+    Log11& infoStream()
+    {
+        writeStream("INFO: ", info_stream);
+
+        return *this;
+    }
+
+    Log11& errorStream()
+    {
+        writeStream("ERROR: ", error_stream);
+
+        return *this;
+    }
+
+    Log11& warnStream()
+    {
+        writeStream("WARN: ", warn_stream);
+
+        return *this;
+    }
+
+
+    Log11& writeStream(const std::string tag, std::stringstream& pstream)
+    {
+        if(current_stream != &pstream)
+        {
+            flush_stream();            
+        }
+
+        current_stream = &pstream;
+        std::string s{};
+        writeDate(s);
+        (*current_stream) << s << tag;
+        return *this;
+    }
+
+
+    template<typename D>
+    Log11& operator<<(const D& v)
+    {
+        (*current_stream) << v;
+        return *this;
     }
 
 
@@ -214,11 +283,33 @@ public:
     template <typename Fun>
     void setLogCall(Fun f) { fn_logcall = f; }
 
+
+    void flush() { worker.flush(); }
+
+    void flush_stream()
+    {
+        auto fun_stream = [this](std::stringstream* st) {
+            auto s = st->str();
+            st->str("");
+            st->clear();
+
+            if (s.size() > 0)
+            {
+                this->build(s);
+            }
+        };
+
+        auto ctn = std::vector<std::stringstream*>{&debug_stream, &warn_stream, &error_stream, &info_stream};
+        std::for_each(ctn.begin(), ctn.end(), fun_stream);
+    }
+
+
     void wait()
     {
-        if(!isClose)
+        if (!isClose)
         {
             isClose = true;
+            flush_stream();
             worker.push([=]{ worker.finish(); });
             thw.join();
         }
@@ -244,12 +335,15 @@ private:
     template <typename R>
     void print(std::string& st, R&& r)
     {
+        flush_stream();
         std::stringstream s;
         s << st << r;
 
         st = s.str();
         build(st);
+        st.clear();
     }
+
 
     std::string& getStr()
     {
@@ -271,6 +365,7 @@ private:
         }
     }
 
+
     void writeDate(std::string& str)
     {
         time_t t;
@@ -287,6 +382,7 @@ private:
         }
     }
 
+
     void checkInit()
     {
         if(!isInit)
@@ -296,15 +392,11 @@ private:
         }
     }
 
-    void build(std::string &str)
+
+    void build(const std::string &str)
     {
-        std::string tlog {str};
-
-        // reset stream
-        str.clear();
-
         // insert
-        worker.push([=]{ fn_logcall(tlog); });
+        worker.push([&, str](){ fn_logcall(str); });
     }
 
 
@@ -327,4 +419,7 @@ private:
     std::array<MAP_THREAD, QUEUE_SIZE> map_m;
 
     std::thread thw;
+
+    std::stringstream debug_stream, info_stream, warn_stream, error_stream;
+    std::stringstream *current_stream;
 };
