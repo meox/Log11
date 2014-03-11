@@ -257,7 +257,6 @@ public:
         return *this;
     }
 
-
     Log11& warnStream()
     {
         writeStream("WARN: ", warn_stream);
@@ -396,8 +395,8 @@ private:
     {
         if(!isInit)
         {
-            isInit = true;
             fn_loginit();
+            isInit = true;
         }
     }
 
@@ -405,7 +404,10 @@ private:
     void build(const std::string &str)
     {
         // insert
-        worker.push([&, str](){ fn_logcall(str); });
+        if (isInit)
+        {
+            worker.push([&, str](){ fn_logcall(str); });
+        }
     }
 
 
