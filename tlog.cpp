@@ -14,55 +14,60 @@ struct FileLog
 
     FileLog()
     {
-        log.setLogInit([=](){
-            out.open("mylog.txt");
-        });
+        myout.open("mylog.txt", std::ofstream::out);
 
-        log.setLogCall([=](const std::string& s){
-            out << s << std::endl;
+        log.setLogCall([this](std::string s){
+            std::unique_lock<std::mutex> g{m};
+            myout << s << std::endl;
         });        
     }
 
     ~FileLog()
     {
         log.close();
-        out.close();
+        myout.close();
     }
 
-    std::ofstream out;
+    std::ofstream myout;
+    std::mutex m;
 };
 
 void test1()
 {
-
     FileLog flog;
+    std::mutex m;
  
-    std::thread th_a([&flog](){
+    std::thread th_a([&](){
         for (unsigned int i = 0; i < 10000; i++)
         {
+            std::unique_lock<std::mutex> g{m};
             flog.log.info("A", i, "->", 3.14);
         }
     });
 
 
-    std::thread th_b([&flog](){
+    std::thread th_b([&](){
         for (unsigned int i = 0; i < 10000; i++)
         {
+            std::unique_lock<std::mutex> g{m};
             flog.log.info("B", i, "->", 3.14, ":)");
         }
     });
 
 
-    std::thread th_c([&flog](){
+    std::thread th_c([&](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            flog.log.debug("C", i, "->", 3.14, 5, "alfa");
+            std::unique_lock<std::mutex> g{m};
+            flog.log.debug("C", i, "->", 3.14, 5, "alfa", -1);
         }
     });
 
     th_a.join();
     th_b.join();
     th_c.join();
+
+    std::cerr << "test1 completed" << std::endl;
 }
 
 void test2(Log11 log)
@@ -100,6 +105,7 @@ void test2(Log11 log)
 
 int main()
 {
-    test2(std::move(Log11()));
+    test1();
+    //test2(std::move(Log11()));
     return 0;
 }

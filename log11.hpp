@@ -31,7 +31,7 @@ class Log11
 
         Worker(Worker &&rhs) : done{false}
         {
-            rhs.finish();
+            rhs.close();
             qworker = std::move(rhs.qworker);
             thw = std::thread([this]{ run(); });
         }
@@ -46,6 +46,7 @@ class Log11
                 {
                     g.unlock();
                     std::this_thread::sleep_for(duration);
+                    return true;
                 }
             }())
             {}
@@ -77,6 +78,7 @@ class Log11
         {
             std::unique_lock<std::mutex> g{mw};
             qworker.push_back(std::forward<F>(f));
+            counter++;
         }
 
         void close()
@@ -104,9 +106,9 @@ public:
             fmt_date{"%Y-%m-%d %H:%M:%S"},
             fmt_date_len{fmt_date.size()},
             worker{},
-            fn_loginit{ [](){} },
-            fn_logcall{ [](const std::string& t){ std::cout << t << std::endl; } },
-            current_stream(&debug_stream)
+            fut_loginit{std::async(std::launch::deferred, []{})},
+            fn_logcall{[](std::string t){ std::cout << t << std::endl; }},
+            current_stream{&debug_stream}
     {
     }
 
@@ -128,9 +130,9 @@ public:
             fmt_date{std::move(rhs.fmt_date)},
             fmt_date_len{rhs.fmt_date_len},
             worker{},
-            fn_loginit{ std::move(rhs.fn_loginit) },
-            fn_logcall{ std::move(rhs.fn_logcall) },
-            current_stream(&debug_stream)
+            fut_loginit{std::async(std::launch::deferred, []{})},
+            fn_logcall{std::move(rhs.fn_logcall)},
+            current_stream{&debug_stream}
     {
         rhs.wait();
     }
@@ -163,7 +165,7 @@ public:
     {
         checkInit();
 
-        auto& st = getStr();
+        std::string st{};
         writeDate(st);
         st += tag;
         print(st, std::forward<Ts>(args)...);
@@ -283,7 +285,10 @@ public:
 
 
     template <typename Fun>
-    void setLogInit(Fun f) { fn_loginit = f; }
+    void setLogInit(Fun f)
+    { 
+        fut_loginit = std::async(std::launch::deferred, [f]{ f(); });
+    }
 
     template <typename Fun>
     void setLogCall(Fun f) { fn_logcall = f; }
@@ -345,31 +350,7 @@ private:
         flush_stream();
         std::stringstream s;
         s << st << r;
-
-        st = s.str();
-        build(st);
-        st.clear();
-    }
-
-
-    std::string& getStr()
-    {
-        std::hash<std::thread::id> hash_fn;
-        auto id = std::this_thread::get_id();
-        auto index_map = (hash_fn(id) % QUEUE_SIZE);
-
-        std::lock_guard<std::mutex> g{mutex_map[index_map]};
-
-        auto f_id = map_m[index_map].find(id);
-        if(f_id == map_m[index_map].end())
-        {
-            auto nid = map_m[index_map].insert(std::pair<std::thread::id, std::string>(id, std::string{}));
-            return nid.first->second;
-        }
-        else
-        {
-            return f_id->second;
-        }
+        build(s.str());
     }
 
 
@@ -392,28 +373,27 @@ private:
 
     void checkInit()
     {
+        std::unique_lock<std::mutex> g{_global_mutex};
         if(!isInit)
         {
-            fn_loginit();
+            fut_loginit.wait();
             isInit = true;
         }
     }
 
 
-    void build(const std::string &str)
+    void build(std::string str)
     {
         // insert
         if (isInit)
         {
-            worker.push([&, str](){ fn_logcall(str); });
+            worker.push([this, str]{ fn_logcall(str); });
         }
     }
 
 
 private:
     using MAP_THREAD = std::map<std::thread::id, std::string>;
-    enum { QUEUE_SIZE = 10};
-
     bool isInit, isClose;
 
     Level c_level;
@@ -422,14 +402,13 @@ private:
     size_t fmt_date_len;
 
     Worker worker;
-    std::function<void()> fn_loginit;
-    std::function<void(const std::string& str)> fn_logcall;
-
-    std::array<std::mutex, QUEUE_SIZE> mutex_map;
-    std::array<MAP_THREAD, QUEUE_SIZE> map_m;
+    std::future<void> fut_loginit;
+    std::function<void(std::string str)> fn_logcall;
 
     std::stringstream debug_stream, info_stream, warn_stream, error_stream;
     std::stringstream *current_stream;
+
+    std::mutex _global_mutex;
 };
 
 #endif
