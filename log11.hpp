@@ -78,7 +78,6 @@ class Log11
         {
             std::unique_lock<std::mutex> g{mw};
             qworker.push_back(std::forward<F>(f));
-            counter++;
         }
 
         void close()
