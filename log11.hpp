@@ -22,59 +22,75 @@ class Log11
 {
     struct Worker
     {
-        Worker() : done{false} {}
-        Worker(const Worker& rhs) : done{rhs.done}, qworker{} {}
-        Worker(Worker &&rhs) : done{rhs.done}, qworker(std::move(rhs.qworker))
-        {}
+        Worker() : done{false}
+        {
+            thw = std::thread([this] { run(); });
+        }
 
-        void finish() { done = true; }
+        Worker(const Worker& rhs) = delete;
+
+        Worker(Worker &&rhs) : done{false}
+        {
+            rhs.finish();
+            qworker = std::move(rhs.qworker);
+            thw = std::thread([this]{ run(); });
+        }
+
+        void finish() { push([this]{done = true;}); }
         void flush()
         {
-            bool f = false;
-            while(!f)
-            {
-                mw.lock(); f = qworker.empty(); mw.unlock();
-                if(f) break;
-                usleep(100000);
-            }
+            while([this]{
+                std::unique_lock<std::mutex> g{mw};
+                if (qworker.empty()) return false;
+                else
+                {
+                    g.unlock();
+                    std::this_thread::sleep_for(duration);
+                }
+            }())
+            {}
         }
 
         void run()
         {
-            //std::chrono::milliseconds d( 100 );
-
-            while(!done)
+            while (!done)
             {
-                mw.lock();
-                if(!qworker.empty())
+                std::unique_lock<std::mutex> g{mw};
+                if (!qworker.empty())
                 {
-                    auto f = qworker.front();
+                    auto f = move(qworker.front());
                     qworker.pop_front();
-                    mw.unlock();
+                    g.unlock();
 
-                    //execute f, there is only 1 thread that execute qworker so it's implicit thread safe
                     f();
                 }
                 else
                 {
-                    mw.unlock();
-                    usleep(100000);
-                    //std::this_thread::sleep_for(d);
+                    g.unlock();
+                    std::this_thread::sleep_for(duration);
                 }
             }
         }
 
-        void push(const std::function<void()>& f)
+        template <typename F>
+        void push(F f)
         {
-            mw.lock();
-            qworker.push_back(f);
-            mw.unlock();
+            std::unique_lock<std::mutex> g{mw};
+            qworker.push_back(std::forward<F>(f));
+        }
+
+        void close()
+        {
+            finish();
+            thw.join();
         }
 
     private:
         bool done;
-        std::mutex mw;
+        mutable std::mutex mw;
         std::deque<std::function<void()>> qworker;
+        const std::chrono::milliseconds duration{100};
+        std::thread thw;
     };
 
 public:
@@ -92,27 +108,13 @@ public:
             fn_logcall{ [](const std::string& t){ std::cout << t << std::endl; } },
             current_stream(&debug_stream)
     {
-        thw = std::thread([=](){ worker.run(); });
     }
 
 
     /**
-     * Copy constructor
+     * Delete copy constructor
      */
-    Log11(const Log11& rhs) :
-            isInit{rhs.isInit},
-            isClose{rhs.isClose},
-            c_level{rhs.c_level},
-            sep_{rhs.sep_},
-            fmt_date{rhs.fmt_date},
-            fmt_date_len{rhs.fmt_date_len},
-            worker{rhs.worker},
-            fn_loginit{ rhs.fn_loginit },
-            fn_logcall{ rhs.fn_logcall },
-            current_stream(&debug_stream)
-    {
-        thw = std::thread([=](){ worker.run(); });
-    }
+    Log11(const Log11& rhs) = delete;
 
 
     /**
@@ -131,7 +133,6 @@ public:
             current_stream(&debug_stream)
     {
         rhs.wait();
-        thw = std::thread([=](){ worker.run(); });
     }
 
 
@@ -239,28 +240,24 @@ public:
     Log11& infoStream()
     {
         writeStream("INFO: ", info_stream);
-
         return *this;
     }
 
     Log11& errorStream()
     {
         writeStream("ERROR: ", error_stream);
-
         return *this;
     }
 
     Log11& critStream()
     {
         writeStream("CRITIC: ", error_stream);
-
         return *this;
     }
 
     Log11& warnStream()
     {
         writeStream("WARN: ", warn_stream);
-
         return *this;
     }
 
@@ -318,14 +315,16 @@ public:
         {
             isClose = true;
             flush_stream();
-            worker.push([=]{ worker.finish(); });
-            thw.join();
+            worker.finish();
         }
     }
+
+    void close() { wait(); }
   
     virtual ~Log11()
     {
         wait();
+        worker.close();
     }
 
 private:
@@ -412,7 +411,7 @@ private:
 
 
 private:
-    typedef std::map<std::thread::id, std::string> MAP_THREAD;
+    using MAP_THREAD = std::map<std::thread::id, std::string>;
     enum { QUEUE_SIZE = 10};
 
     bool isInit, isClose;
@@ -428,8 +427,6 @@ private:
 
     std::array<std::mutex, QUEUE_SIZE> mutex_map;
     std::array<MAP_THREAD, QUEUE_SIZE> map_m;
-
-    std::thread thw;
 
     std::stringstream debug_stream, info_stream, warn_stream, error_stream;
     std::stringstream *current_stream;

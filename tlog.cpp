@@ -15,11 +15,11 @@ struct FileLog
     FileLog()
     {
         log.setLogInit([=](){
-             out.open("mylog.txt");
+            out.open("mylog.txt");
         });
 
         log.setLogCall([=](const std::string& s){
-             out << s << std::endl;
+            out << s << std::endl;
         });        
     }
 
@@ -78,7 +78,7 @@ void test2(Log11 log)
     std::thread th_b([&log](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            log.info("B", i, "->", 3.14, ":)");
+            log.info("B", i, "->", 2.7, ":)");
         }
     });
 
@@ -86,13 +86,15 @@ void test2(Log11 log)
     std::thread th_c([&log](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            log.debug("C", i, "->", 3.14, 5, "alfa");
+            log.debug("C", i, "->", "alfa", 1982);
         }
     });
 
     th_a.join();
     th_b.join();
     th_c.join();
+
+    std::cout << "DONE" << std::endl;
 }
 
 
