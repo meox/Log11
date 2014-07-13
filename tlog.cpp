@@ -10,56 +10,50 @@
 
 struct FileLog
 {
-    Log11 log;
-
     FileLog()
     {
-        myout.open("mylog.txt", std::ofstream::out);
+        myout = std::make_shared<std::ofstream>("mylog.txt", std::ofstream::out);
 
-        log.setLogCall([this](std::string s){
+        log.setLogCall([this](const std::string& s){
             std::unique_lock<std::mutex> g{m};
-            myout << s << std::endl;
-        });        
+            *myout << s << std::endl;
+        });
     }
 
     ~FileLog()
     {
         log.close();
-        myout.close();
+        myout->flush();
+        myout->close();
     }
 
-    std::ofstream myout;
     std::mutex m;
+    std::shared_ptr<std::ofstream> myout;
+    Log11 log;
 };
 
 void test1()
 {
     FileLog flog;
-    std::mutex m;
- 
+    
     std::thread th_a([&](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            std::unique_lock<std::mutex> g{m};
             flog.log.info("A", i, "->", 3.14);
         }
     });
 
-
     std::thread th_b([&](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            std::unique_lock<std::mutex> g{m};
             flog.log.info("B", i, "->", 3.14, ":)");
         }
     });
 
-
     std::thread th_c([&](){
         for (unsigned int i = 0; i < 10000; i++)
         {
-            std::unique_lock<std::mutex> g{m};
-            flog.log.debug("C", i, "->", 3.14, 5, "alfa", -1);
+            flog.log.info("C", i, "->", 3.14, 5, "alfa", -1);
         }
     });
 

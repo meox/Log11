@@ -22,14 +22,14 @@ class Log11
 {
     struct Worker
     {
-        Worker() : done{false}
+        Worker() : done{false}, isclosed{false}
         {
             thw = std::thread([this] { run(); });
         }
 
         Worker(const Worker& rhs) = delete;
 
-        Worker(Worker &&rhs) : done{false}
+        Worker(Worker &&rhs) : done{false}, isclosed{false}
         {
             rhs.close();
             qworker = std::move(rhs.qworker);
@@ -82,13 +82,23 @@ class Log11
 
         void close()
         {
-            finish();
-            thw.join();
+            std::unique_lock<std::mutex> g{_internal_mutex};
+            if (!isclosed)
+            {
+                finish();
+                thw.join();
+                isclosed = true;
+            }
+        }
+
+        ~Worker()
+        {
+            close();
         }
 
     private:
-        bool done;
-        mutable std::mutex mw;
+        bool done, isclosed;
+        mutable std::mutex mw, _internal_mutex;
         std::deque<std::function<void()>> qworker;
         const std::chrono::milliseconds duration{100};
         std::thread thw;
@@ -133,7 +143,7 @@ public:
             fn_logcall{std::move(rhs.fn_logcall)},
             current_stream{&debug_stream}
     {
-        rhs.wait();
+        rhs.close();
     }
 
 
@@ -313,22 +323,20 @@ public:
     }
 
 
-    void wait()
+    void close()
     {
+        std::unique_lock<std::mutex> g{_internal_mutex};
         if (!isClose)
         {
             isClose = true;
             flush_stream();
-            worker.finish();
+            worker.close();
         }
     }
-
-    void close() { wait(); }
   
     virtual ~Log11()
     {
-        wait();
-        worker.close();
+        close();
     }
 
 private:
@@ -372,7 +380,7 @@ private:
 
     void checkInit()
     {
-        std::unique_lock<std::mutex> g{_global_mutex};
+        
         if(!isInit)
         {
             fut_loginit.wait();
@@ -392,7 +400,6 @@ private:
 
 
 private:
-    using MAP_THREAD = std::map<std::thread::id, std::string>;
     bool isInit, isClose;
 
     Level c_level;
@@ -402,12 +409,11 @@ private:
 
     Worker worker;
     std::future<void> fut_loginit;
-    std::function<void(std::string str)> fn_logcall;
+    std::function<void(const std::string& str)> fn_logcall;
 
     std::stringstream debug_stream, info_stream, warn_stream, error_stream;
     std::stringstream *current_stream;
-
-    std::mutex _global_mutex;
+    std::mutex _internal_mutex;
 };
 
 #endif
