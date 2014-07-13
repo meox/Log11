@@ -108,14 +108,12 @@ public:
     enum class Level { LEVEL_DEBUG, LEVEL_INFO, LEVEL_WARNING, LEVEL_ERROR, LEVEL_FATAL };
 
     Log11() :
-            isInit{false},
             isClose{false},
             c_level{Level::LEVEL_DEBUG},
             sep_{" "},
             fmt_date{"%Y-%m-%d %H:%M:%S"},
             fmt_date_len{fmt_date.size()},
             worker{},
-            fut_loginit{std::async(std::launch::deferred, []{})},
             fn_logcall{[](std::string t){ std::cout << t << std::endl; }},
             current_stream{&debug_stream}
     {
@@ -132,14 +130,12 @@ public:
      * Move constructor
      */
     Log11(Log11&& rhs) :
-            isInit{rhs.isInit},
             isClose{rhs.isClose},
             c_level{rhs.c_level},
             sep_{std::move(rhs.sep_)},
             fmt_date{std::move(rhs.fmt_date)},
             fmt_date_len{rhs.fmt_date_len},
             worker{},
-            fut_loginit{std::async(std::launch::deferred, []{})},
             fn_logcall{std::move(rhs.fn_logcall)},
             current_stream{&debug_stream}
     {
@@ -172,8 +168,6 @@ public:
     template <typename ...Ts>
     void print_level(const std::string& tag, Ts&&... args)
     {
-        checkInit();
-
         std::string st{};
         writeDate(st);
         st += tag;
@@ -294,9 +288,9 @@ public:
 
 
     template <typename Fun>
-    void setLogInit(Fun f)
+    void initlog(Fun f)
     { 
-        fut_loginit = std::async(std::launch::deferred, [f]{ f(); });
+        f();
     }
 
     template <typename Fun>
@@ -377,30 +371,14 @@ private:
         }
     }
 
-
-    void checkInit()
-    {
-        
-        if(!isInit)
-        {
-            fut_loginit.wait();
-            isInit = true;
-        }
-    }
-
-
     void build(std::string str)
     {
-        // insert
-        if (isInit)
-        {
-            worker.push([this, str]{ fn_logcall(str); });
-        }
+        worker.push([this, str]{ fn_logcall(str); });
     }
 
 
 private:
-    bool isInit, isClose;
+    bool isClose;
 
     Level c_level;
     std::string sep_;
@@ -408,7 +386,6 @@ private:
     size_t fmt_date_len;
 
     Worker worker;
-    std::future<void> fut_loginit;
     std::function<void(const std::string& str)> fn_logcall;
 
     std::stringstream debug_stream, info_stream, warn_stream, error_stream;

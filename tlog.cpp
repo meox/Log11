@@ -73,7 +73,6 @@ void test2(Log11 log)
         }
     });
 
-
     std::thread th_b([&log](){
         for (unsigned int i = 0; i < 10000; i++)
         {
